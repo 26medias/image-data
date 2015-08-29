@@ -13,6 +13,7 @@ var imageData	= function() {
 		width:	800,
 		height:	600
 	};
+	this.pixels		= new Uint32Array(this.options.width*this.options.height);
 }
 
 /*
@@ -196,7 +197,7 @@ imageData.prototype.export = function(filename, callback) {
 					callback(false);
 					return false;
 				}
-			
+				
 				fs.write(fd, encoded.data, 0, encoded.data.length, null, function(err) {
 					if (err) {
 						console.log("Error writing file "+filename);
@@ -212,6 +213,77 @@ imageData.prototype.export = function(filename, callback) {
 			
 		break;
 	}
+	
+	return this;
+}
+
+
+imageData.prototype.scale = function(outputWidth, outputHeight) {
+	/* Original code: http://stackoverflow.com/a/19223362/690236 */
+	// Prepare the output pixels
+	var output	= new Uint32Array(outputWidth*outputHeight);
+	
+	var W				= this.options.width;
+	var H				= this.options.height;
+	var time1			= Date.now();
+	outputWidth			= Math.round(outputWidth);
+	outputHeight		= Math.round(outputHeight);
+	var ratio_w			= W / outputWidth;
+	var ratio_h			= H / outputHeight;
+	var ratio_w_half	= Math.ceil(ratio_w/2);
+	var ratio_h_half	= Math.ceil(ratio_h/2);
+	var color;
+	
+	for(var j = 0; j < outputHeight; j++){
+		for(var i = 0; i < outputWidth; i++){
+			var weight = 0;
+			var weights = 0;
+			var weights_alpha = 0;
+			var gx_r = gx_g = gx_b = gx_a = 0;
+			var center_y = (j + 0.5) * ratio_h;
+			for(var yy = Math.floor(j * ratio_h); yy < (j + 1) * ratio_h; yy++){
+				var dy = Math.abs(center_y - (yy + 0.5)) / ratio_h_half;
+				var center_x = (i + 0.5) * ratio_w;
+				var w0 = dy*dy //pre-calc part of w
+				for(var xx = Math.floor(i * ratio_w); xx < (i + 1) * ratio_w; xx++){
+					var dx = Math.abs(center_x - (xx + 0.5)) / ratio_w_half;
+					var w = Math.sqrt(w0 + dx*dx);
+					if(w >= -1 && w <= 1){
+						//hermite filter
+						weight = 2 * w*w*w - 3*w*w + 1;
+						if(weight > 0) {
+							dx = (xx + yy*W);
+							// Get the color
+							color	= this.rgba_decode(this.pixels[dx]);
+							//alpha
+							gx_a += weight * color.a;
+							weights_alpha += weight;
+							//colors
+							if(color.a < 255)
+							weight = weight * color.a / 250;
+							gx_r += weight * color.r;
+							gx_g += weight * color.g;
+							gx_b += weight * color.b;
+							weights += weight;
+						}
+					}
+				}
+			}
+			var x2 = (i + j*outputWidth);
+			output[x2]		= this.rgba_encode({
+				r:	gx_r / weights,
+				g:	gx_g / weights,
+				b:	gx_b / weights,
+				a:	gx_a / weights_alpha
+			});
+		}
+	}
+	//console.log("hermite = "+(Math.round(Date.now() - time1)/1000)+" s");
+	
+	// Overwrite the original pixels
+	this.options.width	= outputWidth;
+	this.options.height	= outputHeight;
+	this.pixels			= output;
 	
 	return this;
 }
