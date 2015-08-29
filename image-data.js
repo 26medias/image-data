@@ -218,8 +218,26 @@ imageData.prototype.export = function(filename, callback) {
 }
 
 
-imageData.prototype.scale = function(outputWidth, outputHeight) {
+imageData.prototype.scale = function(options) {
 	/* Original code: http://stackoverflow.com/a/19223362/690236 */
+	
+	options	= _.extend({
+		ratio:	.5,
+		width:	false,
+		height:	false
+	},options);
+	
+	
+	if (options.ratio) {
+		outputWidth		= this.options.width*options.ratio;
+		outputHeight	= this.options.height*options.ratio;
+	} else {
+		outputWidth		= options.width;
+		outputHeight	= options.height;
+	}
+	
+	
+	
 	// Prepare the output pixels
 	var output	= new Uint32Array(outputWidth*outputHeight);
 	
