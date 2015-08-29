@@ -1,0 +1,13 @@
+{
+  "name": "image-data",
+  "description": "Image manipulation with pixel access",
+  "version": "0.0.1",
+  "dependencies": {
+    "jpeg-js": "^0.1.1",
+    "pixel-gif": "0.0.0-alpha.1",
+    "pixel-jpg": "0.0.0-alpha.3",
+    "pngjs2": "latest",
+    "pstack": "latest",
+    "underscore": "latest"
+  }
+}
