@@ -1,4 +1,4 @@
-
+var domain		= require('domain');
 var _			= require("underscore");
 var path		= require("path");
 var fs			= require("fs");
@@ -32,23 +32,61 @@ imageData.prototype.create = function(options) {
 imageData.prototype.open = function(filename, callback) {
 	var scope	= this;
 	var ext		= path.extname(filename).toLowerCase();
-	switch (ext) {
-		case ".png":
-			console.log("PNG Image",filename);
-			var metas	= false;
-			
-			fs.createReadStream(filename).pipe(new png({
-				filterType: 4
-			})).on('metadata', function(metadatas) {
-				metas	= metadatas;
-			}).on('parsed', function() {
-				console.log("parsed");
+	
+	// Create a domain to catch the "Unhandled 'error' event" that happens if a file header is unexpected for example (wrong extention)
+	var d = domain.create()
+	d.on('error', function() {
+		callback(true);
+	})
+	d.run(function () {
+		switch (ext) {
+			case ".png":
+				console.log("PNG Image",filename);
+				var metas	= false;
 				
-				if (!metas) {
-					callback(false);
-				} else {
+				fs.createReadStream(filename).pipe(new png({
+					filterType: 4
+				})).on('metadata', function(metadatas) {
+					metas	= metadatas;
+				}).on('parsed', function() {
+					console.log("parsed");
 					
-					scope.options	= _.extend(scope.options, metas);
+					if (!metas) {
+						callback(true);
+					} else {
+						
+						scope.options	= _.extend(scope.options, metas);
+						scope.pixels	= new Uint32Array(scope.options.width*scope.options.height);
+						
+						for (var y = 0; y < scope.options.height; y++) {
+							for (var x = 0; x < scope.options.width; x++) {
+								var idx = (scope.options.width * y + x) << 2;
+								
+								scope.pixels[scope.index(x, y, scope.options.width)] = scope.rgba_encode({
+									r:	this.data[idx],
+									g:	this.data[idx+1],
+									b:	this.data[idx+2],
+									a:	this.data[idx+3]
+								});
+							}
+						}
+						
+						callback(false);
+					}
+					
+				});
+			break;
+			case ".jpg":
+			case ".jpeg":
+				console.log("JPEG Image",filename);
+				jpg.parse(filename).then(function(images) {
+					
+					var image	= images[0];
+					
+					scope.options	= _.extend(scope.options, {
+						width:	image.width,
+						height:	image.height
+					});
 					scope.pixels	= new Uint32Array(scope.options.width*scope.options.height);
 					
 					for (var y = 0; y < scope.options.height; y++) {
@@ -56,80 +94,50 @@ imageData.prototype.open = function(filename, callback) {
 							var idx = (scope.options.width * y + x) << 2;
 							
 							scope.pixels[scope.index(x, y, scope.options.width)] = scope.rgba_encode({
-								r:	this.data[idx],
-								g:	this.data[idx+1],
-								b:	this.data[idx+2],
-								a:	this.data[idx+3]
+								r:	image.data[idx],
+								g:	image.data[idx+1],
+								b:	image.data[idx+2],
+								a:	image.data[idx+3]
 							});
 						}
 					}
 					
-					callback(true);
-				}
-				
-			});
-		break;
-		case ".jpg":
-		case ".jpeg":
-			console.log("JPEG Image",filename);
-			jpg.parse(filename).then(function(images) {
-				
-				var image	= images[0];
-				
-				scope.options	= _.extend(scope.options, {
-					width:	image.width,
-					height:	image.height
+					callback(false);
 				});
-				scope.pixels	= new Uint32Array(scope.options.width*scope.options.height);
-				
-				for (var y = 0; y < scope.options.height; y++) {
-					for (var x = 0; x < scope.options.width; x++) {
-						var idx = (scope.options.width * y + x) << 2;
-						
-						scope.pixels[scope.index(x, y, scope.options.width)] = scope.rgba_encode({
-							r:	image.data[idx],
-							g:	image.data[idx+1],
-							b:	image.data[idx+2],
-							a:	image.data[idx+3]
-						});
+			break;
+			case ".gif":
+				console.log("GIF Image",filename);
+				gif.parse(filename).then(function(images) {
+					
+					var image	= images[0];
+					
+					scope.options	= _.extend(scope.options, {
+						width:	image.width,
+						height:	image.height
+					});
+					scope.pixels	= new Uint32Array(scope.options.width*scope.options.height);
+					
+					for (var y = 0; y < scope.options.height; y++) {
+						for (var x = 0; x < scope.options.width; x++) {
+							var idx = (scope.options.width * y + x) << 2;
+							
+							scope.pixels[scope.index(x, y, scope.options.width)] = scope.rgba_encode({
+								r:	image.data[idx],
+								g:	image.data[idx+1],
+								b:	image.data[idx+2],
+								a:	image.data[idx+3]
+							});
+						}
 					}
-				}
-				
-				callback(true);
-			});
-		break;
-		case ".gif":
-			console.log("GIF Image",filename);
-			gif.parse(filename).then(function(images) {
-				
-				var image	= images[0];
-				
-				scope.options	= _.extend(scope.options, {
-					width:	image.width,
-					height:	image.height
+					
+					callback(false);
 				});
-				scope.pixels	= new Uint32Array(scope.options.width*scope.options.height);
-				
-				for (var y = 0; y < scope.options.height; y++) {
-					for (var x = 0; x < scope.options.width; x++) {
-						var idx = (scope.options.width * y + x) << 2;
-						
-						scope.pixels[scope.index(x, y, scope.options.width)] = scope.rgba_encode({
-							r:	image.data[idx],
-							g:	image.data[idx+1],
-							b:	image.data[idx+2],
-							a:	image.data[idx+3]
-						});
-					}
-				}
-				
-				callback(true);
-			});
-		break;
-		default:
-			console.log("Ext not supported:",ext);
-		break;
-	}
+			break;
+			default:
+				console.log("Ext not supported:",ext);
+			break;
+		}
+	});
 	return this;
 }
 
@@ -219,16 +227,163 @@ imageData.prototype.export = function(filename, callback) {
 
 
 imageData.prototype.scale = function(options) {
-	/* Original code: http://stackoverflow.com/a/19223362/690236 */
 	
 	options	= _.extend({
-		ratio:	.5,
-		width:	false,
-		height:	false
+		display:	'crop',	// crop, fit
+		scaleUp:	false,
+		ratio:		.5,
+		width:		false,
+		height:		false
 	},options);
 	
 	
-	if (options.ratio) {
+	
+	var src	= {
+		width:	this.options.width,
+		height:	this.options.height,
+		ratio:	this.options.width/this.options.height	// >1: Landscape. <1: Portrait. 1: Square.
+	}
+	var dest	= {
+		width:	options.width,
+		height:	options.height,
+		ratio:	options.width/options.height			// >1: Landscape. <1: Portrait. 1: Square.
+	};
+	var resized	= {
+		width:	0,
+		height:	0
+	};
+	
+	switch (options.display) {
+		default:
+		case "crop":
+			// Calculate the new image size
+			
+			if (dest.width > src.width) {
+				// zoom in
+				resized.width	= dest.width;
+				resized.height	= Math.round(resized.width/src.ratio);
+			} else {
+				// zoom out
+				resized.width	= dest.width;
+				resized.height	= Math.round(resized.width/src.ratio);
+			}
+			if (resized.height < dest.height) {
+				resized.height 	= dest.height;
+				resized.width	= Math.round(resized.height*src.ratio);
+			}
+			
+			// Calculate the alignment
+			resized.x	= Math.round((dest.width-resized.width)/2);
+			resized.y	= Math.round((dest.height-resized.height)/2);
+			
+			
+			console.log("src",JSON.stringify(src, null, 4));
+			console.log("dest",JSON.stringify(dest, null, 4));
+			console.log("resized",JSON.stringify(resized, null, 4));
+			
+			// Resize the image
+			resized.pixels	= this.resize({
+				width:		resized.width,
+				height:		resized.height,
+				overwrite:	true
+			}).pixels;
+			
+			var offset	= {
+				x:	0,
+				y:	0
+			};
+			
+			if (resized.x<0) {
+				offset.x	= resized.x*-1;
+			}
+			if (resized.y<0) {
+				offset.y	= resized.y*-1;
+			}
+			
+			console.log("offset",JSON.stringify(offset, null, 4));
+			
+			
+			// Resize the array
+			this.options.width	= dest.width;
+			this.options.height	= dest.height;
+			this.pixels			= new Uint32Array(this.options.width*this.options.height);
+			
+			// Copy the pixels
+			for (y=0;y<this.options.height;y++) {
+				for (x=0;x<this.options.width;x++) {
+					indexSrc	= ((y+offset.y) * resized.width) + x+offset.x;
+					indexDest	= y * this.options.width + x;
+					this.pixels[indexDest]	= resized.pixels[indexSrc];
+				}
+			}
+			
+		break;
+		case "fit":
+			
+			if (dest.ratio>src.ratio) {
+				// zoom out
+				resized.height 	= dest.height;
+				resized.width	= Math.round(resized.height*src.ratio);
+			} else {
+				// zoom in
+				resized.width	= dest.width;
+				resized.height	= Math.round(resized.width/src.ratio);
+			}
+			
+			// Calculate the alignment
+			resized.x	= Math.round((dest.width-resized.width)/2);
+			resized.y	= Math.round((dest.height-resized.height)/2);
+			
+			
+			console.log("src",JSON.stringify(src, null, 4));
+			console.log("dest",JSON.stringify(dest, null, 4));
+			console.log("resized",JSON.stringify(resized, null, 4));
+			
+			// Resize the image
+			resized.pixels	= this.resize({
+				width:		resized.width,
+				height:		resized.height,
+				overwrite:	true
+			}).pixels;
+			
+			
+			console.log("offset",JSON.stringify(offset, null, 4));
+			
+			
+			// Resize the array
+			this.options.width	= dest.width;
+			this.options.height	= dest.height;
+			this.pixels			= new Uint32Array(this.options.width*this.options.height);
+			
+			// Copy the pixels
+			for (y=0;y<resized.height;y++) {
+				for (x=0;x<resized.width;x++) {
+					indexSrc	= y * resized.width + x;
+					indexDest	= ((y+resized.y) * this.options.width) + x+resized.x;
+					this.pixels[indexDest]	= resized.pixels[indexSrc];
+				}
+			}
+		break;
+	}
+	
+	
+	
+	return this;
+}
+
+
+imageData.prototype.resize = function(options) {
+	/* Original code: http://stackoverflow.com/a/19223362/690236 */
+	
+	options	= _.extend({
+		ratio:		.5,
+		width:		false,
+		height:		false,
+		overwrite:	true
+	},options);
+	
+	
+	if (!options.width || !options.height) {
 		outputWidth		= this.options.width*options.ratio;
 		outputHeight	= this.options.height*options.ratio;
 	} else {
@@ -239,7 +394,7 @@ imageData.prototype.scale = function(options) {
 	
 	
 	// Prepare the output pixels
-	var output	= new Uint32Array(outputWidth*outputHeight);
+	var output			= new Uint32Array(outputWidth*outputHeight);
 	
 	var W				= this.options.width;
 	var H				= this.options.height;
@@ -298,12 +453,20 @@ imageData.prototype.scale = function(options) {
 	}
 	//console.log("hermite = "+(Math.round(Date.now() - time1)/1000)+" s");
 	
-	// Overwrite the original pixels
-	this.options.width	= outputWidth;
-	this.options.height	= outputHeight;
-	this.pixels			= output;
+	if (options.overwrite===true) {
+		// Overwrite the original pixels
+		this.options.width	= outputWidth;
+		this.options.height	= outputHeight;
+		this.pixels			= output;
+		return this;
+	} else {
+		return {
+			width:	outputWidth,
+			height:	outputHeight,
+			pixels:	output
+		};
+	}
 	
-	return this;
 }
 
 
